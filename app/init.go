@@ -1,39 +1,21 @@
-package hello
+package app
 
 import (
 	"encoding/json"
 	"fmt"
+	"gobot/src/chatwork"
+	"gobot/src/env"
 	"io"
-	"log"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/joho/godotenv"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/urlfetch"
 )
 
-var chatWorkToken string
-var roomID string
-
 func init() {
-	// load env
-	envMap, err := godotenv.Read("my.env")
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	chatWorkToken = envMap["ChatWorkToken"]
-	if len(chatWorkToken) < 1 {
-		panic("ChatWorkToken is not found in .env file")
-	}
-	roomID = envMap["RoomID"]
-	if len(roomID) < 1 {
-		panic("RoomID is not found in .env file")
-	}
+
+	env.Load()
 
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/time", timeHandler)
@@ -67,7 +49,7 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 送信
-	if err := sendCWMessage(r, roomID, body); err != nil {
+	if err := chatwork.SendMessage(r, env.RoomID, body); err != nil {
 		fmt.Fprintln(w, err)
 	}
 
@@ -87,7 +69,7 @@ func timeHandler(w http.ResponseWriter, r *http.Request) {
 	body := strconv.Itoa(time.Now().In(jst).Hour()) + "時ですよ"
 
 	// 送信
-	if err := sendCWMessage(r, roomID, body); err != nil {
+	if err := chatwork.SendMessage(r, env.RoomID, body); err != nil {
 		fmt.Fprintln(w, err)
 	}
 
@@ -158,39 +140,11 @@ func mentionHandler(w http.ResponseWriter, r *http.Request) {
 	message := strings.Join(arr, "\n")
 
 	// Send message
-	err = sendCWMessage(r, roomID, message)
+	err = chatwork.SendMessage(r, env.RoomID, message)
 	if err != nil {
 		fmt.Fprintln(w, err)
 	}
 
 	// Response
 	fmt.Fprintln(w, "Hello, chatwork!")
-}
-
-func sendCWMessage(r *http.Request, roomID, body string) error {
-	// Create request
-	req, err := http.NewRequest("POST", "https://api.chatwork.com/v2/rooms/"+roomID+"/messages", nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Add("X-ChatWorkToken", chatWorkToken)
-
-	// クエリを組み立て
-	values := url.Values{}   // url.Valuesオブジェクト生成
-	values.Add("body", body) // key-valueを追加
-	req.URL.RawQuery = values.Encode()
-
-	// Doメソッドでリクエストを投げる
-	// http.Response型のポインタ（とerror）が返ってくる
-	ctx := appengine.NewContext(r)
-	client := urlfetch.Client(ctx)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	// 関数を抜ける際に必ずresponseをcloseするようにdeferでcloseを呼ぶ
-	defer resp.Body.Close()
-
-	return nil
 }
